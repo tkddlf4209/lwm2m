@@ -11,22 +11,21 @@ function startWebServer(port, event) {
     wss.on('connection', function connection(client, req) {
 
         var device_type = req.headers.device_type;
-        var uuid = req.headers.uuid;
 
-        if (!device_type || !uuid) { // 연결 시 헤더에 장치타입(device_type)값이 없을 경우 연결을 강제종료
+        if (!device_type) { // 연결 시 헤더에 장치타입(device_type)값이 없을 경우 연결을 강제종료
             console.log('device_type or uuid not defined!!');
             client.close();
             return;
         } else {
-            client.socket_id = uuid; // 고유 uuid
             client.device_type = device_type; // 장치 타입 
             event.emit('socket_connect', client) // 연결 Client 정보 전달
 
             client.on('message', (message) => {
                 try {
                     var response = JSON.parse(message);
-
+                    // console.log(response);
                     if (response.uuid && callbackUuids[response.uuid]) { // 응답 callback 
+                        //console.log('response', response.uuid);
                         callbackUuids[response.uuid].resolve(response);
                         delete callbackUuids[response.uuid];
                     } else {

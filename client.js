@@ -1,10 +1,10 @@
 const DEVICE_LWM2M_CLIENT = 'LWM2M_CLIENT';
 const DEVICE_OCF_CLIENT = 'OCF_CLIENT';
-const DEVICE_IOT_WARE_SERVER = 'IOT_WARE_SERVER';
+const DEVICE_IOTWARE_SERVER = 'IOTWARE_SERVER';
 const { v4: uuidv4 } = require('uuid');
 const util = require('util')
 const CLIENT_UUID = uuidv4();
-const DEVICE_TYPE = DEVICE_IOT_WARE_SERVER
+const DEVICE_TYPE = DEVICE_IOTWARE_SERVER
 const WEBSOCKET_SERVER_ADDRESS = 'ws://localhost:3000'
 
 
@@ -24,9 +24,11 @@ const OBJECT_REMOVED_NOTIFY = "OBJECT_REMOVED"
 var WebSocket = require('ws');
 var reconnectInterval = 5000;
 var ws;
-var devices = {
-    '1': {
-        device_id: '1',
+var devices = {};
+function makeDevice(device_id) {
+    var device = {
+        device_id: device_id,
+        connect: true,
         objects: {
             '3303': {
                 object_id: '3303',
@@ -48,9 +50,34 @@ var devices = {
                     }
                 ]
             }
+            //,
+            // '3304': {
+            //     object_id: '3304',
+            //     name: 'humidity',
+            //     resources: [
+            //         {
+            //             item_id: 5700,
+            //             name: 'Sensor Value',
+            //             operation: 'R',
+            //             type: 'Float',
+            //             value: '33.3728'
+            //         },
+            //         {
+            //             item_id: 5850,
+            //             name: 'On/Off',
+            //             operation: 'RW',
+            //             type: 'Boolean',
+            //             value: 'true'
+            //         }
+            //     ]
+            // }
         }
     }
+    devices[device_id] = device;
+    return device
 }
+
+makeDevice(1); // make device_id 1 device
 
 var connect = function () {
 
@@ -69,7 +96,6 @@ var connect = function () {
     ws.on('error', function () {
         console.log('socket error');
     });
-
     ws.on('message', function (data) {
         try {
             //console.log(data);
@@ -83,6 +109,7 @@ var connect = function () {
                             msg_type: DEVICE_LIST_RSP,
                             body: devices
                         }))
+
                         break;
                     case OBJECT_GET_REQ:
                         var object = null;
@@ -104,6 +131,7 @@ var connect = function () {
                                     result: true
                                 }
                             }))
+
                         } else {
                             ws.send(JSON.stringify({
                                 uuid: req.uuid,
@@ -115,6 +143,7 @@ var connect = function () {
                         }
                         break;
                     case OBJECT_UPDATE_REQ:
+                        //console.log(req.body);
                         var deivce_id = req.body.device_id;
                         var object_id = req.body.object_id;
                         var item_id = req.body.item_id;
@@ -168,87 +197,6 @@ var connect = function () {
 };
 connect();
 
-function addObj(device_id, object_id) {
-
-    var name;
-    var value;
-
-    if (object_id == 3303) {
-        name = "temperature"
-        value = (Math.random() * (38.000 - 24.0000) + 38.0000).toFixed(4);
-    } else {
-        name = "humidity"
-        value = (Math.random() * (100.000 - 0.0000) + 0.0000).toFixed(4);
-    }
-
-    Object.keys(devices).forEach(key => {
-
-        if (key == device_id) {
-            var object = {
-                object_id: object_id,
-                name: name,
-                resources: [
-                    {
-                        item_id: 5700, // lwm2m 연동 item ID 
-                        name: 'Sensor Value', // Agent Resource UI name
-                        operation: 'R',  // excute(E), Read(R), Write(W)  
-                        type: "Float", // value type
-                        value: value
-                    },
-                    {
-                        item_id: 5850,
-                        name: 'On/Off',
-                        operation: 'RW',
-                        type: 'Boolean',
-                        value: 'false'
-                    }
-                ]
-            }
-
-            devices[device_id].objects[object_id] = object;
-
-            console.log(object);
-
-            object.socket_id = CLIENT_UUID;
-            object.device_type = DEVICE_TYPE;
-            object.device_id = device_id;
-
-            ws.send(JSON.stringify({
-                msg_type: OBJECT_ADD_NOTIFY,
-                body: {
-                    object: object
-                }
-            }))
-        }
-
-
-    })
-
-}
-
-
-function removeObj(device_id, object_id) {
-
-    Object.keys(devices).forEach(key => {
-
-        if (key == device_id) {
-            if (devices[device_id].objects[object_id]) {
-                ws.send(JSON.stringify({
-                    msg_type: OBJECT_REMOVED_NOTIFY,
-                    body: {
-                        device_id: device_id,
-                        object_id: object_id
-                    }
-                }))
-                delete devices[device_id].objects[object_id]
-            } else {
-                console.log('obj is undefined');
-            }
-        }
-
-    })
-
-}
 
 
 function updateObj(device_id, object_id, item_id, value) {
@@ -273,12 +221,6 @@ function updateObj(device_id, object_id, item_id, value) {
                 }
             })
 
-
-
-
-
-
-
         }
 
     })
@@ -290,13 +232,8 @@ function checkDeviceExist(device_id) {
 }
 
 function addDevice(device_id) {
-    var data = {
-        device_id: device_id,
-        objects: {}
-    };
-
-    devices[device_id] = data
-
+    var data = makeDevice(device_id)
+    devices[device_id] = data;
     ws.send(JSON.stringify({
         msg_type: DEVICE_ADD_NOTIFY,
         body: data
@@ -315,8 +252,6 @@ function help() {
     console.log('1. list : 장치 리스트 보기');
     console.log('2. delete device {device_id} : id에 해당하는 디바이스 제거 ');
     console.log('3. add device {device_id} : id에 해당하는 디바이스 추가');
-    console.log('4. add object {device_id} {object_id} : 디바이스에 object 추가');
-    console.log('4. remove object {device_id} {object_id} : 디바이스 object 제거');
     console.log('4. update item {device_id} {object_id} {item_id} {value}: object 값 변경');
     console.log('===============================================================');
 }
@@ -355,32 +290,6 @@ rl.on("line", function (line) {
             }
 
         }
-    } else if (line.includes("add object")) {
-        var device_id = line.split(' ')[2];
-        var object_id = line.split(' ')[3];
-        if (!device_id) {
-            console.log('device_id undefined');
-        }
-
-        if (!object_id) {
-            console.log('object_id undefined');
-        }
-
-        addObj(device_id, object_id)
-
-    } else if (line.includes("remove object")) {
-        var device_id = line.split(' ')[2];
-        var object_id = line.split(' ')[3];
-
-        if (!device_id) {
-            console.log('device_id undefined');
-        }
-
-        if (!object_id) {
-            console.log('object_id undefined');
-        }
-
-        removeObj(device_id, object_id)
     } else if (line.includes("update item ")) {
         var device_id = line.split(' ')[2];
         var object_id = line.split(' ')[3];
